@@ -18,6 +18,10 @@ responder_ip_bytes = 24
 run = True
 fileIterator = glob.iglob(rootDirectory+"*/dns.log")
 
+#contains pre-processed copies of all the data the software will work with
+#TODO: check for file existing
+runningDataFile = open("raw_data.plog","r+")
+
 #Return the sample arithmetic mean of data.
 def mean(data):
     n = len(data)
@@ -40,7 +44,7 @@ def stdev(data):
     pvar = ss/n # the population variance
     return pvar**0.5
 
-while run:
+while run: #runs while more files in the fileIterator queue
     try:
         targetFile = fileIterator.next()
     except StopIteration:
@@ -49,15 +53,21 @@ while run:
         raise
     
     if run:
-        logFile = open(targetFile)
+        logFile = open(targetFile,"r")
         
         for line in logFile:
             if not (line[0] == "#"):
                 lineArray = line.split("\t")
                 if len(lineArray) != 27:
-                    break
+                    break #don't parse if the file doesn't have all the data we need
                 else:
-                    #TODO: perform data analysis on the line
+                    #TODO: brocut the logFile into the runningDataFile (starting where we left off if the logfile exists)
+                    #the format of the parent loop may have to change depending on how the brocut works
+                    #when brocutting to the new file, convert the timestamps into a python-readable format
                     pass
         
         logFile.close()
+
+#TODO: scan through the runningDataFile and calculate statistics
+
+runningDataFile.close()
