@@ -3,24 +3,20 @@
 # A script written to analyze a set of pre-constructed DNS logs and find outliers and potential data exfiltration issues
 # 
 # Author:   Ben Schwabe
-# Created:  2015.11.12
-# Modified: 2015.11.12
 
 import glob
+import os
+import subprocess as sp
 
 rootDirectory = "/full/path/to/folder/containing/folders/with/dated/logs/"
 
-#important columns
-
-origin_ip_bytes = 23
-responder_ip_bytes = 24
-
 run = True
-fileIterator = glob.iglob(rootDirectory+"*/dns.log")
+fileIterator = glob.iglob(rootDirectory+"*/dns.log") #rotates through all subdirectories and grabs any file named "dns.log" in those subdirectories
 
 #contains pre-processed copies of all the data the software will work with
-#TODO: check for file existing
-runningDataFile = open("raw_data.plog","r+")
+rawDataExists = os.path.isfile("raw_data.plog") #did the file exist
+runningDataFile = open("raw_data.plog","a+") #opens file for reading and appending
+#TODO: find a way to keep track of the last pieces of data logged and resume data calculations from that point
 
 #Return the sample arithmetic mean of data.
 def mean(data):
@@ -41,32 +37,20 @@ def stdev(data):
     if n < 2:
         raise ValueError('variance requires at least two data points')
     ss = sumSquare(data)
-    pvar = ss/n # the population variance
+    pvar = ss/n #the population variance
     return pvar**0.5
 
 while run: #runs while more files in the fileIterator queue
     try:
         targetFile = fileIterator.next()
     except StopIteration:
-        run = False
+        run = False #fileIterator threw an error for no more files to go through
     except:
-        raise
+        raise #just in case a different error is thrown, call it normally
     
     if run:
-        logFile = open(targetFile,"r")
-        
-        for line in logFile:
-            if not (line[0] == "#"):
-                lineArray = line.split("\t")
-                if len(lineArray) != 27:
-                    break #don't parse if the file doesn't have all the data we need
-                else:
-                    #TODO: brocut the logFile into the runningDataFile (starting where we left off if the logfile exists)
-                    #the format of the parent loop may have to change depending on how the brocut works
-                    #when brocutting to the new file, convert the timestamps into a python-readable format
-                    pass
-        
-        logFile.close()
+        runningDataFile.write(sp.check_output("cat {0} | bro-cut -d ts id.orig_h id.resp_h id.resp_p")) #cats the file and bro-cuts the appropriate data into the runningDataFile for use
+        #TODO: proper columns from file in bro-cuts
 
 #TODO: scan through the runningDataFile and calculate statistics
 
