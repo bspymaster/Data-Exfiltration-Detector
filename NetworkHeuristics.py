@@ -117,7 +117,7 @@ doNotReadDict = {"lastDateProcessed":lastDate,"today":todayFolder}
 #    if targetFileDate != doNotReadList["today"] and int(targetFileDate) > doNotReadDict["lastDateProcessed"]: #if folder of current file is not from today and is newer than the last date already processed
 #        runningDataFile.write(sp.check_output("cat {0} | bro-cut -d ts id.orig_h id.resp_h id.resp_p orig_ip_bytes resp_ip_bytes".format(targetFile))) #cats the file and bro-cuts the appropriate data into the runningDataFile for use
 
-runningDataFile.close()
+#runningDataFile.close()
 
 ################################
 #CALCULATE AND ORGANIZE INTO DB#
@@ -133,8 +133,11 @@ oldDay = None
 oldMonth = None
 oldYear = None
 
+#used for generating new keys for each entry in the database (incremented by 1 for each entry & reset per day)
+keyIndex = 0#FIXME: should be 0000, 0001, 0002, etc
+
 #Scan through the runningDataFile and calculate statistics
-#assumes all relevant logged data is pre-processed into a single bro-cut file called "dns.log" with columns ts, orig_h, resp_h, resp_p, orig_ip_bytes, and resp_ip_bytes
+#assumes all relevant logged data is pre-processed into a single bro-cut file called "dns.log" with columns ts, orig_h, resp_h, resp_p, orig_ip_bytes, and resp_ip_bytes with the data sorted by timestamp
 with open("dns.log","r") as runningDataFile: #automatically closes file at end
     for line in runningDataFile:
         logEntryList = line.split("\t")#split line into a list using tabs as a delimiter
@@ -143,27 +146,48 @@ with open("dns.log","r") as runningDataFile: #automatically closes file at end
         logEntryList[TS] = logEntryList[TS].replace("T","-").replace(":","-").replace("+","-")#formats the timestamp to be more usable by replacing "T", ":" and "+" with "-"
         logEntryList[TS] = logEntryList[TS].split("-")#splits the string into a list using "-" as a delimiter. List is now ["yyyy","mm","dd","hh","mm","ss","mili"]
         
+        hourString = "{0}{1}{2}{3}".format(oldYear,oldMonth,oldDay,oldHour)#creates string yyyymmddhh for database logging
+        dayString = "{0}{1}{2}".format(oldYear,oldMonth,oldDay)#creates string yyyymmdd for database logging
+        
         #once times change (i.e. new hour, new day, etc.), pull the data from the appropriate DataStorage instance, write to the proper file, and reset the class for next usage
-        #FIXME: does not correctly log if "today" is a new hour/day/week/month (add "catch-all" to end of file?)
-        #FIXME: re-do the key entries to a more arbitrary piece of data (incremental): yyyymmddxxxx where xxxx is an arbitrary (incremented?) number specific to that file only.
-        #       This allows for calls to specific keys to go directly to the daily file it needs to access to find that key, saving time on filecrawling (only needs to crawl the daily file)
-        #FIXME: may need to make folders if they do not exist yet
+        #FIXME: does not correctly log if "today" is a new hour/day (add "catch-all" to end of file?)
+        #TODO: log different networks (supplied on execution) to different databases
         if oldHour != None: #makes sure loop didn't just start
             if int(oldHour) < int(logEntryList[TS][3]):
+                #make path if it does not exist
+                if not os.path.exists("db/{0}{1}".format(oldYear,oldMonth)):
+                    os.makedirs("db/{0}{1}".format(oldYear,oldMonth))
+                
+                #write data
                 with open("db/{0}{1}/{0}{1}{2}.sdb".format(oldYear,oldMonth,oldDay),"a") as databaseFile:
                     asrequestData = hourData.getMeanSizeRequest()
-                    databaseFile.write("{0}{1}{2}{3},hr,asrqst,{4},{5}".format(oldYear,oldMonth,oldDay,oldHour,asrequestData[0],asrequestData[1]))#average size request
+                    databaseFile.write("{0}{1},{2},hr,asrqst,{3},{4}".format(dayString,keyIndex,hourString,asrequestData[0],asrequestData[1]))#average size request
+                    keyIndex+=1
+                    
                     asresponseData = hourData.getMeanSizeResponse()
-                    databaseFile.write("{0}{1}{2}{3},hr,asrspns,{4},{5}".format(oldYear,oldMonth,oldDay,oldHour,asresponseData[0],asresponseData[1]))#average size response
+                    databaseFile.write("{0}{1},{2},hr,asrspns,{3},{4}".format(dayString,keyIndex,hourString,asresponseData[0],asresponseData[1]))#average size response
+                    keyIndex+=1
+                
                 hourData.reset()
             if int(oldDay) < int(logEntryList[TS][2]):
+                #make path if it does not exist
+                if not os.path.exists("db/{0}{1}".format(oldYear,oldMonth)):
+                    os.makedirs("db/{0}{1}".format(oldYear,oldMonth))
+                
+                #write data
                 with open("db/{0}{1}/{0}{1}{2}.sdb".format(oldYear,oldMonth,oldDay),"a") as databaseFile:
                     asrequestData = dayData.getMeanSizeRequest()
-                    databaseFile.write("{0}{1}{2}24,dy,asrqst,{3},{4}".format(oldYear,oldMonth,oldDay,asrequestData[0],asrequestData[1]))#average size request
+                    databaseFile.write("{0}{1},{2}00,dy,asrqst,{3},{4}".format(dayString,keyIndex,dayString,asrequestData[0],asrequestData[1]))#average size request
+                    keyIndex+=1
+                    
                     asresponseData = dayData.getMeanSizeResponse()
-                    databaseFile.write("{0}{1}{2}24,dy,asrspns,{3},{4}".format(oldYear,oldMonth,oldDay,asresponseData[0],asresponseData[1]))#average size response
+                    databaseFile.write("{0}{1},{2}00,dy,asrspns,{3},{4}".format(dayString,keyIndex,dayString,asresponseData[0],asresponseData[1]))#average size response
+                    keyIndex+=1
+                
                 dayData.reset()
+                keyIndex = 0
         
+        #re-calculate old timestamp for use on next iteration
         oldHour = logEntryList[TS][3]
         oldDay = logEntryList[TS][2]
         oldMonth = logEntryList[TS][1]
