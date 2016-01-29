@@ -4,14 +4,15 @@
 # 
 # Author:   Ben Schwabe
 
-from glob import glob
 import os
-import subprocess as sp
 import datetime
 from calendar import monthrange
+import sys
+import netaddr #this is an external package: https://github.com/drkjam/netaddr
 
-#change this path to be the path to the server folder (one level out from the dated folders containing dns.log)
-rootDirectory = "/full/path/to/folder/containing/folders/with/dated/logs/"
+#change this path to be the path to the folder containing the sorted dns.log
+rootDirectory = "C:/Users/bspym/Dropbox/ITS/Data-Exfiltration-Detector/"
+#/full/path/to/folder/containing/time/sorted/log/
 
 #column indices after splitting a log line into a list
 TS = 0
@@ -76,7 +77,7 @@ class DataStorage:
     #calculates more data into the entries based on a data set given
     #PARAM list logEntry: a list of information taken from a single line in a logfile
     def addData(self,logEntry):
-        #TODO: process the data from the line and add it into the appropriate slots (may need to make a tree system of some sort for "top 10" data)
+        #TODO: process the data from the line and add it into the appropriate slots (may need to make a tree system of some sort for "top 10" data or use mode on a list
         self.numberEntries+=1#increment the amount of data added to the database
         self.addSizeRequest(logEntry)
         self.addSizeResponse(logEntry)
@@ -84,40 +85,36 @@ class DataStorage:
     #adds the size of the request (in bytes) to the total size (which can be later divided by the amount of entries logged to find the mean bytes)
     #PARAM list logEntry: a list of information taken from a single line in a logfile
     def addSizeRequest(self,logEntry):
-        self.totalSizeRequest+=logEntry[ORIG_IP_BYTES]
+        self.totalSizeRequest+=int(logEntry[ORIG_IP_BYTES])
     
     #adds the size of the request response (in bytes) to the total size (which can be later divided by the amount of entries logged to find the mean bytes)
     #PARAM list logEntry: a list of information taken from a single line in a logfile
     def addSizeResponse(self,logEntry):
-        self.totalSizeResponse+=logEntry[RESP_IP_BYTES]
+        self.totalSizeResponse+=int(logEntry[RESP_IP_BYTES])
 
-##############################
-#PARSE DATA INTO RUNNING FILE#
-##############################
+###########################
+#GET COMMANDLINE AGRUMENTS#
+###########################
 
-#fileList = sorted(glob(rootDirectory+"*/dns.log")) #crawls through all subdirectories and grabs any file named "dns.log" in those subdirectories, puts it in a list, and sorts it smallest to largest (oldest to newest)
+#Runs through the list of command line arguments
+i=1
+ipList = [] #list of all IP subnets to record (in CIDR notation)
+while i < len(sys.argv):
+    ipList.append(sys.argv[i].strip()) #append the ip to the list (strip any trailing whitespace)
+    i += 1
 
-#contains pre-processed copies of all the data the software will work with
-#rawDataExists = os.path.isfile("raw_data.plog") #did the file exist
-#runningDataFile = open("raw_data.plog","a") #opens file for appending
+#################################
+#CALCULATE DATA TO AVOID READING#
+#################################
 
-#calculates the name of the folder that contains network data from the current day (so it knows what folder to skip)
-todayFolder = str(datetime.date.today()) #calculates today's date and saves as a string (yyyy-mm-dd)
-todayFolder = "".join(todayFolder.split("-")) #removes the hyphens from the name (yyyymmdd)
+#calculates the current day (so the program knows to avoid incomplete data from today)
+todayDate = str(datetime.date.today()) #calculates today's date and saves as a string (yyyy-mm-dd)
+todayDate = "".join(todayDate.split("-")) #removes the hyphens from the name (yyyymmdd)
 
 lastDate = -1 #FIXME: Change with calculations to pick up where it left off (keep as -1 if no file processed)
 
-#contains data on folders that contain data not needed (either already read or incomplete files)
-doNotReadDict = {"lastDateProcessed":lastDate,"today":todayFolder}
-
-#crawls through sorted fileList (PRECOMPILER NOW DOES THIS)
-#for fileObj in fileList:
-#    targetFileList = targetFile.replace("\\","/").split("/") #full path split into a list (handles Windows backslashes just in case)
-#    targetFileDate = targetFileList[len(targetFileList-2)] #finds the date of the file using its parent folder
-#    if targetFileDate != doNotReadList["today"] and int(targetFileDate) > doNotReadDict["lastDateProcessed"]: #if folder of current file is not from today and is newer than the last date already processed
-#        runningDataFile.write(sp.check_output("cat {0} | bro-cut -d ts id.orig_h id.resp_h id.resp_p orig_ip_bytes resp_ip_bytes".format(targetFile))) #cats the file and bro-cuts the appropriate data into the runningDataFile for use
-
-#runningDataFile.close()
+#contains data on dates that contain data not needed (either already read or incomplete data for that time)
+doNotReadDict = {"lastDayProcessed":lastDate,"today":todayDate}
 
 ################################
 #CALCULATE AND ORGANIZE INTO DB#
@@ -134,26 +131,26 @@ oldMonth = None
 oldYear = None
 
 #used for generating new keys for each entry in the database (incremented by 1 for each entry & reset per day)
-keyIndex = 0#FIXME: should be 0000, 0001, 0002, etc
+keyIndex = 0#note that str(keyIndex).zfill(4) will be used when appending leading zeros to this number (makes it a 4-digit numeric string)
 
 #Scan through the runningDataFile and calculate statistics
 #assumes all relevant logged data is pre-processed into a single bro-cut file called "dns.log" with columns ts, orig_h, resp_h, resp_p, orig_ip_bytes, and resp_ip_bytes with the data sorted by timestamp
-with open("dns.log","r") as runningDataFile: #automatically closes file at end
+with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatically closes file at end
     for line in runningDataFile:
-        logEntryList = line.split("\t")#split line into a list using tabs as a delimiter
+        logEntryList = line.split("\t")#split line into a list of strings using tabs as a delimiter
         
         #bro-cut formats the timestamp into [yyyy]-[mm]-[dd]T[hh]:[mm]:[ss]+[mili]
         logEntryList[TS] = logEntryList[TS].replace("T","-").replace(":","-").replace("+","-")#formats the timestamp to be more usable by replacing "T", ":" and "+" with "-"
         logEntryList[TS] = logEntryList[TS].split("-")#splits the string into a list using "-" as a delimiter. List is now ["yyyy","mm","dd","hh","mm","ss","mili"]
+        dayString = "{0}{1}{2}".format(logEntryList[TS][0],logEntryList[TS][1],logEntryList[TS][2])#used to compare to doNotReadDict
         
-        hourString = "{0}{1}{2}{3}".format(oldYear,oldMonth,oldDay,oldHour)#creates string yyyymmddhh for database logging
-        dayString = "{0}{1}{2}".format(oldYear,oldMonth,oldDay)#creates string yyyymmdd for database logging
+        oldHourString = "{0}{1}{2}{3}".format(oldYear,oldMonth,oldDay,oldHour)#creates string yyyymmddhh for database logging
+        oldDayString = "{0}{1}{2}".format(oldYear,oldMonth,oldDay)#creates string yyyymmdd for database logging
         
         #once times change (i.e. new hour, new day, etc.), pull the data from the appropriate DataStorage instance, write to the proper file, and reset the class for next usage
-        #FIXME: does not correctly log if "today" is a new hour/day (add "catch-all" to end of file?)
         #TODO: log different networks (supplied on execution) to different databases
-        if oldHour != None: #makes sure loop didn't just start
-            if int(oldHour) < int(logEntryList[TS][3]):
+        if oldHour != None: #avoids processing data at the wrong times (i.e. the loop just started, or processing data from today, when there might be incomplete data)
+            if int(oldHour) < int(logEntryList[TS][3]):#hour changed
                 #make path if it does not exist
                 if not os.path.exists("db/{0}{1}".format(oldYear,oldMonth)):
                     os.makedirs("db/{0}{1}".format(oldYear,oldMonth))
@@ -161,15 +158,15 @@ with open("dns.log","r") as runningDataFile: #automatically closes file at end
                 #write data
                 with open("db/{0}{1}/{0}{1}{2}.sdb".format(oldYear,oldMonth,oldDay),"a") as databaseFile:
                     asrequestData = hourData.getMeanSizeRequest()
-                    databaseFile.write("{0}{1},{2},hr,asrqst,{3},{4}".format(dayString,keyIndex,hourString,asrequestData[0],asrequestData[1]))#average size request
+                    databaseFile.write("{0}{1},{2},hr,asrqst,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asrequestData[0],asrequestData[1]))#average size request
                     keyIndex+=1
                     
                     asresponseData = hourData.getMeanSizeResponse()
-                    databaseFile.write("{0}{1},{2},hr,asrspns,{3},{4}".format(dayString,keyIndex,hourString,asresponseData[0],asresponseData[1]))#average size response
+                    databaseFile.write("{0}{1},{2},hr,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asresponseData[0],asresponseData[1]))#average size response
                     keyIndex+=1
                 
                 hourData.reset()
-            if int(oldDay) < int(logEntryList[TS][2]):
+            if int(oldDay) < int(logEntryList[TS][2]):#day changed
                 #make path if it does not exist
                 if not os.path.exists("db/{0}{1}".format(oldYear,oldMonth)):
                     os.makedirs("db/{0}{1}".format(oldYear,oldMonth))
@@ -177,26 +174,36 @@ with open("dns.log","r") as runningDataFile: #automatically closes file at end
                 #write data
                 with open("db/{0}{1}/{0}{1}{2}.sdb".format(oldYear,oldMonth,oldDay),"a") as databaseFile:
                     asrequestData = dayData.getMeanSizeRequest()
-                    databaseFile.write("{0}{1},{2}00,dy,asrqst,{3},{4}".format(dayString,keyIndex,dayString,asrequestData[0],asrequestData[1]))#average size request
+                    databaseFile.write("{0}{1},{2}00,dy,asrqst,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asrequestData[0],asrequestData[1]))#average size request
                     keyIndex+=1
                     
                     asresponseData = dayData.getMeanSizeResponse()
-                    databaseFile.write("{0}{1},{2}00,dy,asrspns,{3},{4}".format(dayString,keyIndex,dayString,asresponseData[0],asresponseData[1]))#average size response
+                    databaseFile.write("{0}{1},{2}00,dy,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asresponseData[0],asresponseData[1]))#average size response
                     keyIndex+=1
                 
                 dayData.reset()
-                keyIndex = 0
+                keyIndex = 0#re-use keys since the day changed
         
-        #re-calculate old timestamp for use on next iteration
-        oldHour = logEntryList[TS][3]
-        oldDay = logEntryList[TS][2]
-        oldMonth = logEntryList[TS][1]
-        oldYear = logEntryList[TS][0]
+        #re-calculate old timestamp for use on next iteration if the lastDayProcessed is less than the current entry being accessed
+        if doNotReadDict["lastDayProcessed"] < int(dayString):
+            oldHour = logEntryList[TS][3]
+            oldDay = logEntryList[TS][2]
+            oldMonth = logEntryList[TS][1]
+            oldYear = logEntryList[TS][0]
+            
+        #set the times to None so incomplete data from today is not written to the database
+        if doNotReadDict["today"] == int(dayString):
+            oldHour = None
+            oldDay = None
+            oldMonth = None
+            oldYear = None
         
-        #add data to each class to be calcualted
-        hourData.addData(logEntryList)
-        dayData.addData(logEntryList)
-
-#TODO: Log the hourly and daily data to files (since the last thing in the raw data will for sure be the last piece of data for yesterday)
+        #add data to each class to be calcualted, if the data is past the last entries already in the database
+        if doNotReadDict["lastDayProcessed"] < int(dayString) and doNotReadDict["today"] != int(dayString):
+            for cidrip in ipList:
+                if logEntryList[ORIG_H] in netaddr.IPNetwork(cidrip):#checks to make sure the origin IP is one of the IPs being searched
+                    #TODO: add in processing to separate data into specific networks
+                    hourData.addData(logEntryList)
+                    dayData.addData(logEntryList)
 
 #TODO: write yesterday's date to a savefile as a "bookmark" for where the program left off.
