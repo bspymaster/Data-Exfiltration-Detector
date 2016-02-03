@@ -1,13 +1,15 @@
+#!usr/bin/python3
+
 # NetworkHeuristics.py
 # 
 # A script written to analyze a set of pre-constructed DNS logs and find outliers and potential data exfiltration issues
 # 
 # Author:   Ben Schwabe
 
+import sys
 import os
 import datetime
 from calendar import monthrange
-import sys
 import netaddr #this is an external package: https://github.com/drkjam/netaddr
 
 #change this path to be the path to the folder containing the sorted dns.log
@@ -44,13 +46,21 @@ class DataStorage:
     #retrieves the mean size of the requests and the standard deviation
     #RETURN list: a list in the format [Mean Size (as a double),Standard Deviation (as a double)]
     def getMeanSizeRequest(self):
-        self.meanSizeRequest[0] = self.totalSizeRequest/self.numberEntries
-        #TODO: calculate standard deviation
+        try:
+            self.meanSizeRequest[0] = self.totalSizeRequest/self.numberEntries
+            #TODO: calculate standard deviation
+        except ZeroDivisionError:
+            self.meanSizeRequest = [-1.0,-1.0] #no data logged for this time period
         return self.meanSizeRequest
     
     #retrieves the mean size of the requesters and the standard deviation
     #RETURN list: a list in the format [Mean Size (as a double),Standard Deviation (as a double)]
     def getMeanSizeResponse(self):
+        try:
+            self.meanSizeResponse[0] = self.totalSizeResponse/self.numberEntries
+            #TODO: calculate standard deviation
+        except ZeroDivisionError:
+            self.meanSizeResponse = [-1.0,-1.0]
         return self.meanSizeResponse
     
     #retrieves the the ratio of the mean size of the bytes in to the mean size of the bytes out 
@@ -91,6 +101,11 @@ class DataStorage:
     #PARAM list logEntry: a list of information taken from a single line in a logfile
     def addSizeResponse(self,logEntry):
         self.totalSizeResponse+=int(logEntry[RESP_IP_BYTES])
+    
+    #gets the number of entries logged into the DataStorage
+    #RETURN integer: the number of times addData() was called (i.e. the amount of lines of data added to the DataStorage instance)
+    def getNumEntries(self):
+        return self.numberEntries
 
 ###########################
 #GET COMMANDLINE AGRUMENTS#
@@ -102,6 +117,10 @@ ipList = [] #list of all IP subnets to record (in CIDR notation)
 while i < len(sys.argv):
     ipList.append(sys.argv[i].strip()) #append the ip to the list (strip any trailing whitespace)
     i += 1
+
+if len(sys.argv) < 2:
+    print("ERROR: One or more IPs must be defined in the command line arguments.")
+    sys.exit(1)
 
 #################################
 #CALCULATE DATA TO AVOID READING#
@@ -120,9 +139,10 @@ doNotReadDict = {"lastDayProcessed":lastDate,"today":todayDate}
 #CALCULATE AND ORGANIZE INTO DB#
 ################################
 
-#structure to store data in
-hourData = DataStorage()
-dayData = DataStorage()
+#create a list that holds all network data individually (since each network generates its own "table" of data)
+ipDataList = []
+for ip in ipList:
+    ipDataList.append([DataStorage(),DataStorage()]) #appends [hour data, day data] data storage to  a list. The index of these lists corresponds to the index of the ip in ipList
 
 #used for calculating when to reset the data in the dataStorage classes
 oldHour = None
@@ -148,41 +168,45 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
         oldDayString = "{0}{1}{2}".format(oldYear,oldMonth,oldDay)#creates string yyyymmdd for database logging
         
         #once times change (i.e. new hour, new day, etc.), pull the data from the appropriate DataStorage instance, write to the proper file, and reset the class for next usage
-        #TODO: log different networks (supplied on execution) to different databases
+        #FIXME: does not log the last day/hour in the file before EOF
         if oldHour != None: #avoids processing data at the wrong times (i.e. the loop just started, or processing data from today, when there might be incomplete data)
-            if int(oldHour) < int(logEntryList[TS][3]):#hour changed
-                #make path if it does not exist
-                if not os.path.exists("db/{0}{1}".format(oldYear,oldMonth)):
-                    os.makedirs("db/{0}{1}".format(oldYear,oldMonth))
+            
+            for i in range(0,len(ipList)):
+                fileSafeIP = ipList[i].replace(".","_").replace("/","S")#the ip will be in the format 123_456_789_012S34 if the ip is 123.456.789.012/34 (cidr notation)
                 
-                #write data
-                with open("db/{0}{1}/{0}{1}{2}.sdb".format(oldYear,oldMonth,oldDay),"a") as databaseFile:
-                    asrequestData = hourData.getMeanSizeRequest()
-                    databaseFile.write("{0}{1},{2},hr,asrqst,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asrequestData[0],asrequestData[1]))#average size request
-                    keyIndex+=1
+                if int(oldHour) < int(logEntryList[TS][3]) and ipDataList[i][0].getNumEntries() > 0:#hour changed and there is data to log
+                    #make path if it does not exist
+                    if not os.path.exists("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth)):
+                        os.makedirs("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth))
                     
-                    asresponseData = hourData.getMeanSizeResponse()
-                    databaseFile.write("{0}{1},{2},hr,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asresponseData[0],asresponseData[1]))#average size response
-                    keyIndex+=1
-                
-                hourData.reset()
-            if int(oldDay) < int(logEntryList[TS][2]):#day changed
-                #make path if it does not exist
-                if not os.path.exists("db/{0}{1}".format(oldYear,oldMonth)):
-                    os.makedirs("db/{0}{1}".format(oldYear,oldMonth))
-                
-                #write data
-                with open("db/{0}{1}/{0}{1}{2}.sdb".format(oldYear,oldMonth,oldDay),"a") as databaseFile:
-                    asrequestData = dayData.getMeanSizeRequest()
-                    databaseFile.write("{0}{1},{2}00,dy,asrqst,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asrequestData[0],asrequestData[1]))#average size request
-                    keyIndex+=1
+                    #write data
+                    with open("db/{0}/{1}{2}/{1}{2}{3}.sdb".format(fileSafeIP,oldYear,oldMonth,oldDay),"a") as databaseFile:
+                        asrequestData = ipDataList[i][0].getMeanSizeRequest()
+                        databaseFile.write("{0}{1},{2},hr,asrqst,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asrequestData[0],asrequestData[1]))#average size request
+                        keyIndex+=1
+                        
+                        asresponseData = ipDataList[i][0].getMeanSizeResponse()
+                        databaseFile.write("{0}{1},{2},hr,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asresponseData[0],asresponseData[1]))#average size response
+                        keyIndex+=1
                     
-                    asresponseData = dayData.getMeanSizeResponse()
-                    databaseFile.write("{0}{1},{2}00,dy,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asresponseData[0],asresponseData[1]))#average size response
-                    keyIndex+=1
-                
-                dayData.reset()
-                keyIndex = 0#re-use keys since the day changed
+                    ipDataList[i][0].reset()
+                if int(oldDay) < int(logEntryList[TS][2]) and ipDataList[i][1].getNumEntries() > 0:#day changed and there is data to log
+                    #make path if it does not exist
+                    if not os.path.exists("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth)):
+                        os.makedirs("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth))
+                    
+                    #write data
+                    with open("db/{0}/{1}{2}/{1}{2}{3}.sdb".format(fileSafeIP,oldYear,oldMonth,oldDay),"a") as databaseFile:
+                        asrequestData = ipDataList[i][1].getMeanSizeRequest()
+                        databaseFile.write("{0}{1},{2}00,dy,asrqst,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asrequestData[0],asrequestData[1]))#average size request
+                        keyIndex+=1
+                        
+                        asresponseData = ipDataList[i][1].getMeanSizeResponse()
+                        databaseFile.write("{0}{1},{2}00,dy,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asresponseData[0],asresponseData[1]))#average size response
+                        keyIndex+=1
+                    
+                    ipDataList[i][1].reset()
+                    keyIndex = 0#re-use key suffix since the day changed (even though it is still potentially in the same table)
         
         #re-calculate old timestamp for use on next iteration if the lastDayProcessed is less than the current entry being accessed
         if doNotReadDict["lastDayProcessed"] < int(dayString):
@@ -200,10 +224,11 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
         
         #add data to each class to be calcualted, if the data is past the last entries already in the database
         if doNotReadDict["lastDayProcessed"] < int(dayString) and doNotReadDict["today"] != int(dayString):
+            i = 0#index of ipDataList
             for cidrip in ipList:
                 if logEntryList[ORIG_H] in netaddr.IPNetwork(cidrip):#checks to make sure the origin IP is one of the IPs being searched
-                    #TODO: add in processing to separate data into specific networks
-                    hourData.addData(logEntryList)
-                    dayData.addData(logEntryList)
+                    ipDataList[i][0].addData(logEntryList)
+                    ipDataList[i][1].addData(logEntryList)
+                i+=1#next index in ipDataList
 
 #TODO: write yesterday's date to a savefile as a "bookmark" for where the program left off.
