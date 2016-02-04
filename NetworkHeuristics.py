@@ -7,10 +7,16 @@
 # Author:   Ben Schwabe
 
 import sys
+
+#checks for available version (ipaddress module included in 3.3 and after)
+version = sys.version_info
+if version[0] < 3 or (version[0] == 3 and version[1] < 3):
+    raise OSError("You are not using the correct version of Python. Python 3.3 or higher is required for this program to execute.")
+
 import os
 import datetime
 from calendar import monthrange
-import netaddr #this is an external package: https://github.com/drkjam/netaddr
+import ipaddress
 
 #change this path to be the path to the folder containing the sorted dns.log
 rootDirectory = "C:/Users/bspym/Dropbox/ITS/Data-Exfiltration-Detector/"
@@ -169,12 +175,12 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
         
         #once times change (i.e. new hour, new day, etc.), pull the data from the appropriate DataStorage instance, write to the proper file, and reset the class for next usage
         #FIXME: does not log the last day/hour in the file before EOF
-        if oldHour != None: #avoids processing data at the wrong times (i.e. the loop just started, or processing data from today, when there might be incomplete data)
+        if oldHour != None: #avoids processing data at the wrong times (i.e. the loop just started, or processing data from today when there might be incomplete data)
             
             for i in range(0,len(ipList)):
                 fileSafeIP = ipList[i].replace(".","_").replace("/","S")#the ip will be in the format 123_456_789_012S34 if the ip is 123.456.789.012/34 (cidr notation)
                 
-                if int(oldHour) < int(logEntryList[TS][3]) and ipDataList[i][0].getNumEntries() > 0:#hour changed and there is data to log
+                if int(oldHour) != int(logEntryList[TS][3]) and ipDataList[i][0].getNumEntries() > 0:#hour changed and there is data to log
                     #make path if it does not exist
                     if not os.path.exists("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth)):
                         os.makedirs("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth))
@@ -190,7 +196,7 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
                         keyIndex+=1
                     
                     ipDataList[i][0].reset()
-                if int(oldDay) < int(logEntryList[TS][2]) and ipDataList[i][1].getNumEntries() > 0:#day changed and there is data to log
+                if int(oldDay) != int(logEntryList[TS][2]) and ipDataList[i][1].getNumEntries() > 0:#day changed and there is data to log
                     #make path if it does not exist
                     if not os.path.exists("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth)):
                         os.makedirs("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth))
@@ -226,7 +232,7 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
         if doNotReadDict["lastDayProcessed"] < int(dayString) and doNotReadDict["today"] != int(dayString):
             i = 0#index of ipDataList
             for cidrip in ipList:
-                if logEntryList[ORIG_H] in netaddr.IPNetwork(cidrip):#checks to make sure the origin IP is one of the IPs being searched
+                if ipaddress.ip_address(logEntryList[ORIG_H]) in ipaddress.ip_network(cidrip):#checks to make sure the origin IP is one of the IPs being searched
                     ipDataList[i][0].addData(logEntryList)
                     ipDataList[i][1].addData(logEntryList)
                 i+=1#next index in ipDataList
