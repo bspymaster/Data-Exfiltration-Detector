@@ -10,7 +10,6 @@ import sys
 import os
 import datetime
 from calendar import monthrange
-import netaddr #this is an external package: https://github.com/drkjam/netaddr
 
 #change this path to be the path to the folder containing the sorted dns.log
 rootDirectory = "C:/Users/bspym/Dropbox/ITS/Data-Exfiltration-Detector/"
@@ -115,11 +114,14 @@ class DataStorage:
 i=1
 ipList = [] #list of all IP subnets to record (in CIDR notation)
 while i < len(sys.argv):
+    if "/" in sys.argv[i].strip():
+        print "ERROR: invalid ip /24 network '{0}'.".format(sys.argv[i])
+        sys.exit(1)
     ipList.append(sys.argv[i].strip()) #append the ip to the list (strip any trailing whitespace)
     i += 1
 
 if len(sys.argv) < 2:
-    print("ERROR: One or more IPs must be defined in the command line arguments.")
+    print "ERROR: One or more IPs must be defined in the command line arguments."
     sys.exit(1)
 
 #################################
@@ -172,7 +174,8 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
         if oldHour != None: #avoids processing data at the wrong times (i.e. the loop just started, or processing data from today, when there might be incomplete data)
             
             for i in range(0,len(ipList)):
-                fileSafeIP = ipList[i].replace(".","_").replace("/","S")#the ip will be in the format 123_456_789_012S34 if the ip is 123.456.789.012/34 (cidr notation)
+                fileSafeIP = ipList[i].replace(".","_")#the ip will be in the format 123_456_789_012S34 if the ip is 123.456.789.012/34 (cidr notation)
+                fileSafeIP = fileSafeIP + "S24"#assumes /24 network
                 
                 if int(oldHour) < int(logEntryList[TS][3]) and ipDataList[i][0].getNumEntries() > 0:#hour changed and there is data to log
                     #make path if it does not exist
@@ -226,7 +229,11 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
         if doNotReadDict["lastDayProcessed"] < int(dayString) and doNotReadDict["today"] != int(dayString):
             i = 0#index of ipDataList
             for cidrip in ipList:
-                if logEntryList[ORIG_H] in netaddr.IPNetwork(cidrip):#checks to make sure the origin IP is one of the IPs being searched
+                cidrIpList = cidrip.split(".")#split into list
+                cidrIpList = [cidrIpList[0],cidrIpList[1],cidrIpList[2]]#grab the first 3 octets
+                cidrip = ".".join(cidrIpList)#make into a string to compare
+                
+                if cidrip in logEntryList[ORIG_H]:#checks to make sure the origin IP is one of the IPs being searched (assumes /24 network)
                     ipDataList[i][0].addData(logEntryList)
                     ipDataList[i][1].addData(logEntryList)
                 i+=1#next index in ipDataList
