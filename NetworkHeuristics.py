@@ -140,21 +140,19 @@ doNotReadDict["today"] = todayDate
 doNotReadDict["lastDayProcessed"] = [-1 for elem in ipList] #fills all last days processed for the corresponding IPs in ipList with -1 (no last date)
 if not os.path.exists("db/"): #data file doesnt exist
     os.makedirs("db") #make a directory for later use
-    if not os.path.exists("db/info.sdbd"): #no file named info.sdbd
-        lastDate = -1 #no saved last date
-else: #data file exists
-    with open("db/info.sdbd","r") as dataFile:
-        with open("db/info.sdbd.tmp","w") as tempDataFile: #temporary file to copy data from the info over (ignores IPs being searched for, since those IPs will have to have their date updated)
-            for line in dataFile:
-                lineArray = line.split(":")#first element is cidr ip, second is last date written in db
-                lineArray[0] = ".".join(lineArray[0].split(".")[0:3])#compiles the first three octets into an "ip" (since we can ignore the last octet, assuming /24 network)
-                i = 0
-                for ip in ipList:
-                    if lineArray[0] in ip:
-                        doNotReadDict["lastDayProcessed"][i] = int(lineArray[1])#found a matching /24 network previously searched, change lastDayProcessed for that ip (index of lastDatProcessed corresponds with index of ipList)
-                    else:
-                        tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
-                        i+=1
+    if os.path.exists("db/info.sdbd"): #data file exists
+        with open("db/info.sdbd","r") as dataFile:
+            with open("db/info.sdbd.tmp","w") as tempDataFile: #temporary file to copy data from the info over (ignores IPs being searched for, since those IPs will have to have their date updated)
+                for line in dataFile:
+                    lineArray = line.split(":")#first element is cidr ip, second is last date written in db
+                    lineArray[0] = ".".join(lineArray[0].split(".")[0:3])#compiles the first three octets into an "ip" (since we can ignore the last octet, assuming /24 network)
+                    i = 0
+                    for ip in ipList:
+                        if lineArray[0] in ip:
+                            doNotReadDict["lastDayProcessed"][i] = int(lineArray[1])#found a matching /24 network previously searched, change lastDayProcessed for that ip (index of lastDatProcessed corresponds with index of ipList)
+                        else:
+                            tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
+                            i+=1
 
 ################################
 #CALCULATE AND ORGANIZE INTO DB#
