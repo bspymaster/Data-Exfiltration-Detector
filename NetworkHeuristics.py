@@ -147,12 +147,16 @@ if not os.path.exists("db/"): #data file doesnt exist
                     lineArray = line.split(":")#first element is cidr ip, second is last date written in db
                     lineArray[0] = ".".join(lineArray[0].split(".")[0:3])#compiles the first three octets into an "ip" (since we can ignore the last octet, assuming /24 network)
                     i = 0
+                    found = False #flag to mark if the ip was found
                     for ip in ipList:
                         if lineArray[0] in ip:
                             doNotReadDict["lastDayProcessed"][i] = int(lineArray[1])#found a matching /24 network previously searched, change lastDayProcessed for that ip (index of lastDatProcessed corresponds with index of ipList)
-                        else:
-                            tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
-                            i+=1
+                            found = True
+                            break
+                        i+=1
+                    if not found:
+                        tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
+                        
 
 ################################
 #CALCULATE AND ORGANIZE INTO DB#
@@ -265,7 +269,7 @@ yesterdayString = "".join(yesterdayString.split("-"))#converts yesterday to yyyy
 #open the tempDataFile and append the updated networks and dates to the file.
 with open("db/info.sdbd.tmp","a") as tempDataFile:
     for cidrip in ipList:
-        tempDataFile.write("{0}:{1}".format(cidrip,yesterdayString))
+        tempDataFile.write("{0}:{1}\n".format(cidrip,yesterdayString))
 if os.path.exists("db/info.sdbd"):
     os.remove("db/info.sdbd")#removes the old data file
 os.rename("db/info.sdbd.tmp","db/info.sdbd")#changes the temporary data file to the name of the permanent one
