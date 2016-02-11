@@ -132,14 +132,30 @@ if len(sys.argv) < 2:
 #CALCULATE DATA TO AVOID READING#
 #################################
 
+#contains data on dates that contain data not needed (either already read or incomplete data for that time)
+doNotReadDict = {}
+
 #calculates the current day (so the program knows to avoid incomplete data from today)
 todayDate = str(datetime.date.today()) #calculates today's date and saves as a string (yyyy-mm-dd)
 todayDate = "".join(todayDate.split("-")) #removes the hyphens from the name (yyyymmdd)
+doNotReadDict["today"] = todayDate
 
-lastDate = -1 #FIXME: Change with calculations to pick up where it left off (keep as -1 if no file processed)
-
-#contains data on dates that contain data not needed (either already read or incomplete data for that time)
-doNotReadDict = {"lastDayProcessed":lastDate,"today":todayDate}
+#check to see if the sdb data file exists
+doNotReadDict["lastDayProcessed"] = [-1 for elem in ipList] #fills all last days processed for the corresponding IPs in ipList with -1 (no last date)
+if not os.path.exists("db/"): #data file doesnt exist
+    os.makedirs("db") #make a directory for later use
+    if os.path.exists("db/info.sdbd"): #data file exists
+        with open("db/info.sdbd","r") as dataFile:
+            with open("db/info.sdbd.tmp","w") as tempDataFile: #temporary file to copy data from the info over (ignores IPs being searched for, since those IPs will have to have their date updated)
+                for line in dataFile:
+                    lineArray = line.split(":")#first element is cidr ip, second is last date written in db
+                    i = 0
+                    for ip in ipList:
+                        if ipaddress.ip_network(ip) == ipaddress.ip_network(lineArray[0]):
+                            doNotReadDict["lastDayProcessed"][i] = int(lineArray[1])#found a matching network previously searched, change lastDayProcessed for that ip (index of lastDatProcessed corresponds with index of ipList)
+                        else:
+                            tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
+                            i+=1
 
 ################################
 #CALCULATE AND ORGANIZE INTO DB#
@@ -215,11 +231,13 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
                     keyIndex = 0#re-use key suffix since the day changed (even though it is still potentially in the same table)
         
         #re-calculate old timestamp for use on next iteration if the lastDayProcessed is less than the current entry being accessed
-        if doNotReadDict["lastDayProcessed"] < int(dayString):
-            oldHour = logEntryList[TS][3]
-            oldDay = logEntryList[TS][2]
-            oldMonth = logEntryList[TS][1]
-            oldYear = logEntryList[TS][0]
+        for i in range(0,len(ipList)):
+            if doNotReadDict["lastDayProcessed"][i] < int(dayString): #at least one IP being searched is past the last date recorded, so keep track of old dates
+                oldHour = logEntryList[TS][3]
+                oldDay = logEntryList[TS][2]
+                oldMonth = logEntryList[TS][1]
+                oldYear = logEntryList[TS][0]
+                break
             
         #set the times to None so incomplete data from today is not written to the database
         if doNotReadDict["today"] == int(dayString):
@@ -229,12 +247,23 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
             oldYear = None
         
         #add data to each class to be calcualted, if the data is past the last entries already in the database
-        if doNotReadDict["lastDayProcessed"] < int(dayString) and doNotReadDict["today"] != int(dayString):
+        if doNotReadDict["today"] != int(dayString):
             i = 0#index of ipDataList
             for cidrip in ipList:
-                if ipaddress.ip_address(logEntryList[ORIG_H]) in ipaddress.ip_network(cidrip):#checks to make sure the origin IP is one of the IPs being searched
-                    ipDataList[i][0].addData(logEntryList)
-                    ipDataList[i][1].addData(logEntryList)
+                if doNotReadDict["lastDayProcessed"][i] < int(dayString):
+                    if ipaddress.ip_address(logEntryList[ORIG_H]) in ipaddress.ip_network(cidrip):#checks to make sure the origin IP is one of the IPs being searched
+                        ipDataList[i][0].addData(logEntryList)
+                        ipDataList[i][1].addData(logEntryList)
                 i+=1#next index in ipDataList
 
-#TODO: write yesterday's date to a savefile as a "bookmark" for where the program left off.
+yesterday = datetime.date.today() - datetime.timedelta(days=1)#calculate yesterday's date
+yesterdayString = str(yesterday)
+yesterdayString = "".join(yesterdayString.split("-"))#converts yesterday to yyyymmdd
+
+#open the tempDataFile and append the updated networks and dates to the file.
+with open("db/info.sdbd.tmp","a") as tempDataFile:
+    for cidrip in ipList:
+        tempDataFile.write("{0}:{1}".format(cidrip,yesterdayString))
+if os.path.exists("db/info.sdbd"):
+    os.remove("db/info.sdbd")#removes the old data file
+os.rename("db/info.sdbd.tmp","db/info.sdbd")#changes the temporary data file to the name of the permanent one
