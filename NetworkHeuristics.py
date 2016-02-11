@@ -256,7 +256,7 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
                     if cidrip in logEntryList[ORIG_H]:#checks to make sure the origin IP is one of the IPs being searched (assumes /24 network)
                         ipDataList[i][0].addData(logEntryList)
                         ipDataList[i][1].addData(logEntryList)
-                    i+=1#next index in ipDataList
+                i+=1#next index in ipDataList
 
 yesterday = datetime.date.today() - datetime.timedelta(days=1)#calculate yesterday's date
 yesterdayString = str(yesterday)
