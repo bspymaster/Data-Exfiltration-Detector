@@ -144,18 +144,23 @@ doNotReadDict["today"] = todayDate
 doNotReadDict["lastDayProcessed"] = [-1 for elem in ipList] #fills all last days processed for the corresponding IPs in ipList with -1 (no last date)
 if not os.path.exists("db/"): #data file doesnt exist
     os.makedirs("db") #make a directory for later use
-    if os.path.exists("db/info.sdbd"): #data file exists
-        with open("db/info.sdbd","r") as dataFile:
-            with open("db/info.sdbd.tmp","w") as tempDataFile: #temporary file to copy data from the info over (ignores IPs being searched for, since those IPs will have to have their date updated)
-                for line in dataFile:
-                    lineArray = line.split(":")#first element is cidr ip, second is last date written in db
-                    i = 0
-                    for ip in ipList:
-                        if ipaddress.ip_network(ip) == ipaddress.ip_network(lineArray[0]):
-                            doNotReadDict["lastDayProcessed"][i] = int(lineArray[1])#found a matching network previously searched, change lastDayProcessed for that ip (index of lastDatProcessed corresponds with index of ipList)
-                        else:
-                            tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
-                            i+=1
+if os.path.exists("db/info.sdbd"): #data file exists
+    with open("db/info.sdbd","r") as dataFile:
+        with open("db/info.sdbd.tmp","w") as tempDataFile: #temporary file to copy data from the info over (ignores IPs being searched for, since those IPs will have to have their date updated)
+            for line in dataFile:
+                lineArray = line.split(":")#first element is cidr ip, second is last date written in db
+                i = 0
+                found = False #flag to mark if the ip was found
+                for ip in ipList:
+                    print("ip:{0}".format(ip))
+                    print("{0} == {1}".format(ipaddress.ip_network(ip),ipaddress.ip_network(lineArray[0])))
+                    if ipaddress.ip_network(ip) == ipaddress.ip_network(lineArray[0]):
+                        doNotReadDict["lastDayProcessed"][i] = int(lineArray[1])#found a matching network previously searched, change lastDayProcessed for that ip (index of lastDatProcessed corresponds with index of ipList)
+                        found = True
+                        break
+                    i+=1
+                if not found:
+                    tempDataFile.write(line)#ip wasn't found on this line, so leave existing data alone (by copying it over into the new file)
 
 ################################
 #CALCULATE AND ORGANIZE INTO DB#
@@ -263,7 +268,7 @@ yesterdayString = "".join(yesterdayString.split("-"))#converts yesterday to yyyy
 #open the tempDataFile and append the updated networks and dates to the file.
 with open("db/info.sdbd.tmp","a") as tempDataFile:
     for cidrip in ipList:
-        tempDataFile.write("{0}:{1}".format(cidrip,yesterdayString))
+        tempDataFile.write("{0}:{1}\n".format(cidrip,yesterdayString))
 if os.path.exists("db/info.sdbd"):
     os.remove("db/info.sdbd")#removes the old data file
 os.rename("db/info.sdbd.tmp","db/info.sdbd")#changes the temporary data file to the name of the permanent one
