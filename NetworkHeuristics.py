@@ -201,7 +201,7 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
             for i in range(0,len(ipList)):
                 fileSafeIP = ipList[i].replace(".","_").replace("/","S")#the ip will be in the format 123_456_789_012S34 if the ip is 123.456.789.012/34 (cidr notation)
                 
-                if int(oldHour) != int(logEntryList[TS][3]) and ipDataList[i][0].getNumEntries() > 0:#hour changed and there is data to log
+                if (int(oldHour) != int(logEntryList[TS][3]) or if int(oldDay) != int(logEntryList[TS][2])) and ipDataList[i][0].getNumEntries() > 0:#hour changed (or day changed) and there is data to log
                     #make path if it does not exist
                     if not os.path.exists("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth)):
                         os.makedirs("db/{0}/{1}{2}".format(fileSafeIP,oldYear,oldMonth))
