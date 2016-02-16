@@ -31,35 +31,52 @@ class DataStorage:
     
     #resets the data back to defaults to be re-used
     def reset(self):
-        self.numberEntries = 0
+        self.entryList = []
         
-        self.meanSizeRequest = [-1.0,-1.0] #formatted: [meanSize,standardDev]
-        self.meanSizeResponse = [-1.0,-1.0] #formatted: [meanSize,standardDev]
+        self.meanSizeRequest = [-1.0,0.0] #formatted: [meanSize,standardDev]
+        self.meanSizeResponse = [-1.0,0.0] #formatted: [meanSize,standardDev]
         self.ratioBytesInBytesOut = -1.0
-        self.requests = {"topTenQuantity":["","","","","","","","","",""],"topTenSizeBytesOut":["","","","","","","","","",""],"topTenSizeBytesIn":["","","","","","","","","",""]}
-        self.requesters = {"topTenQuantity":["","","","","","","","","",""],"topTenSizeBytesOut":["","","","","","","","","",""],"topTenSizeBytesIn":["","","","","","","","","",""]}
-        
-        self.totalSizeRequest = 0
-        self.totalSizeResponse = 0
+        self.requests = {"topTenQuantity":[],"topTenSizeBytesOut":[],"topTenSizeBytesIn":[]} #each list contains 10 ip strings
+        self.requesters = {"topTenQuantity":[],"topTenSizeBytesOut":[],"topTenSizeBytesIn":[]} #each list contains 10 ip strings
     
     #retrieves the mean size of the requests and the standard deviation
     #RETURN list: a list in the format [Mean Size (as a double),Standard Deviation (as a double)]
     def getMeanSizeRequest(self):
-        try:
-            self.meanSizeRequest[0] = self.totalSizeRequest/self.numberEntries
-            #TODO: calculate standard deviation
-        except ZeroDivisionError:
-            self.meanSizeRequest = [-1.0,-1.0] #no data logged for this time period
+        lengthEntryList = len(self.entryList)
+        if lengthEntryList < 1:
+            self.meanSizeRequest = [-1.0,0.0] #no data logged for this time period
+        else:
+            total = 0.0
+            for obj in self.entryList:
+                total += int(obj[ORIG_IP_BYTES]) #total bytes over the time period
+            self.meanSizeRequest[0] = total/float(lengthEntryList) #calculate mean
+            if lengthEntryList < 2:
+                self.meanSizeRequest[1] = 0.0 #need at least 2 points for standard deviation
+            else: #calculate standard deviation
+                sumSqrDev = 0.0
+                for obj in self.entryList:
+                    sumSqrDev += (int(obj[ORIG_IP_BYTES]) - self.meanSizeRequest[0])**2#sum of the square deviations for the data set
+                self.meanSizeRequest[1] = (sumSqrDev/lengthEntryList)**0.5 #square root of the population variance (the standard deviation)
         return self.meanSizeRequest
     
     #retrieves the mean size of the requesters and the standard deviation
     #RETURN list: a list in the format [Mean Size (as a double),Standard Deviation (as a double)]
     def getMeanSizeResponse(self):
-        try:
-            self.meanSizeResponse[0] = self.totalSizeResponse/self.numberEntries
-            #TODO: calculate standard deviation
-        except ZeroDivisionError:
-            self.meanSizeResponse = [-1.0,-1.0]
+        lengthEntryList = len(self.entryList)
+        if lengthEntryList < 1:
+            self.meanSizeResponse = [-1.0,0.0] #no data logged for this time period
+        else:
+            total = 0.0
+            for obj in self.entryList:
+                total += int(obj[RESP_IP_BYTES]) #total bytes over the time period
+            self.meanSizeResponse[0] = total/float(lengthEntryList) #calculate mean
+            if lengthEntryList < 2:
+                self.meanSizeResponse[1] = 0.0 #need at least 2 points for standard deviation
+            else: #calculate standard deviation
+                sumSqrDev = 0.0
+                for obj in self.entryList:
+                    sumSqrDev += (int(obj[RESP_IP_BYTES]) - self.meanSizeRequest[0])**2#sum of the square deviations for the data set
+                self.meanSizeResponse[1] = (sumSqrDev/lengthEntryList)**0.5 #square root of the population variance (the standard deviation)
         return self.meanSizeResponse
     
     #retrieves the the ratio of the mean size of the bytes in to the mean size of the bytes out 
@@ -86,25 +103,12 @@ class DataStorage:
     #calculates more data into the entries based on a data set given
     #PARAM list logEntry: a list of information taken from a single line in a logfile
     def addData(self,logEntry):
-        #TODO: process the data from the line and add it into the appropriate slots (may need to make a tree system of some sort for "top 10" data or use mode on a list
-        self.numberEntries+=1#increment the amount of data added to the database
-        self.addSizeRequest(logEntry)
-        self.addSizeResponse(logEntry)
-    
-    #adds the size of the request (in bytes) to the total size (which can be later divided by the amount of entries logged to find the mean bytes)
-    #PARAM list logEntry: a list of information taken from a single line in a logfile
-    def addSizeRequest(self,logEntry):
-        self.totalSizeRequest+=int(logEntry[ORIG_IP_BYTES])
-    
-    #adds the size of the request response (in bytes) to the total size (which can be later divided by the amount of entries logged to find the mean bytes)
-    #PARAM list logEntry: a list of information taken from a single line in a logfile
-    def addSizeResponse(self,logEntry):
-        self.totalSizeResponse+=int(logEntry[RESP_IP_BYTES])
+        self.entryList.append(logEntry)
     
     #gets the number of entries logged into the DataStorage
     #RETURN integer: the number of times addData() was called (i.e. the amount of lines of data added to the DataStorage instance)
     def getNumEntries(self):
-        return self.numberEntries
+        return len(self.entryList)
 
 ###########################
 #GET COMMANDLINE AGRUMENTS#
