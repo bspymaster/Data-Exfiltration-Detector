@@ -86,9 +86,17 @@ class DataStorage:
                 self.meanSizeResponse[1] = (sumSqrDev/lengthEntryList)**0.5 #square root of the population variance (the standard deviation)
         return self.meanSizeResponse
     
-    #retrieves the the ratio of the mean size of the bytes in to the mean size of the bytes out 
-    #RETURN double: a double denoting the ratio of the mean size of the bytes in to the mean size of the bytes out 
+    #retrieves the ratio of the total number of bytes from the origin to the total number of bytes of the response 
+    #RETURN float: a floating point number denoting the ratio of the number of bytes from the origin network to the number of bytes from the responder 
     def getRatioBytesIO(self):
+        totalBytesOrigin = 0.0
+        totalBytesResponse = 0.0
+        
+        for entry in self.entryList:
+            totalBytesOrigin += int(entry[ORIG_IP_BYTES])
+            totalBytesResponse += int(entry[RESP_IP_BYTES])
+        
+        self.ratioBytesInBytesOut = totalBytesOrigin/totalBytesResponse #calculate ratio as float, since totalBytesOrigin and totalBytesResponse are boath floats
         return self.ratioBytesInBytesOut
     
     #retrieves various data specific to requests made in the network
@@ -219,6 +227,10 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
                         asresponseData = ipDataList[i][0].getMeanSizeResponse()
                         databaseFile.write("{0}{1},{2},hr,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,asresponseData[0],asresponseData[1]))#average size response
                         keyIndex+=1
+                        
+                        ratioData = ipDataList[i][0].getRatioBytesIO()
+                        databaseFile.write("{0}{1},{2},hr,rbytesio,{3}\n".format(oldDayString,str(keyIndex).zfill(4),oldHourString,ratioData))#ratio of total bytes from network to total bytes from response
+                        keyIndex+=1
                     
                     ipDataList[i][0].reset()
                 if int(oldDay) != int(logEntryList[TS][2]) and ipDataList[i][1].getNumEntries() > 0:#day changed and there is data to log
@@ -234,6 +246,10 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
                         
                         asresponseData = ipDataList[i][1].getMeanSizeResponse()
                         databaseFile.write("{0}{1},{2}00,dy,asrspns,{3},{4}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,asresponseData[0],asresponseData[1]))#average size response
+                        keyIndex+=1
+                        
+                        ratioData = ipDataList[i][1].getRatioBytesIO()
+                        databaseFile.write("{0}{1},{2}00,dy,rbytesio,{3}\n".format(oldDayString,str(keyIndex).zfill(4),oldDayString,ratioData))#ratio of total bytes from network to total bytes from response
                         keyIndex+=1
                     
                     ipDataList[i][1].reset()
