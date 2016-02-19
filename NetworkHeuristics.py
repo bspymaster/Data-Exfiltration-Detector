@@ -1,4 +1,4 @@
-#!usr/bin/python3
+#!/usr/bin/python3
 
 # NetworkHeuristics.py
 # 
@@ -96,7 +96,10 @@ class DataStorage:
             totalBytesOrigin += int(entry[ORIG_IP_BYTES])
             totalBytesResponse += int(entry[RESP_IP_BYTES])
         
-        self.ratioBytesInBytesOut = totalBytesOrigin/totalBytesResponse #calculate ratio as float, since totalBytesOrigin and totalBytesResponse are boath floats
+        if totalBytesResponse == 0.0:
+            self.ratioBytesInBytesOut = -1.0 #no ratio
+        else:
+            self.ratioBytesInBytesOut = totalBytesOrigin/totalBytesResponse #calculate ratio as float, since totalBytesOrigin and totalBytesResponse are boath floats
         return self.ratioBytesInBytesOut
     
     #retrieves various data specific to requests made in the network
@@ -276,7 +279,7 @@ with open("{0}dns.log".format(rootDirectory),"r") as runningDataFile: #automatic
             i = 0#index of ipDataList
             for cidrip in ipList:
                 if doNotReadDict["lastDayProcessed"][i] < int(dayString):
-                    if ipaddress.ip_address(logEntryList[ORIG_H]) in ipaddress.ip_network(cidrip):#checks to make sure the origin IP is one of the IPs being searched
+                    if ipaddress.ip_address(logEntryList[ORIG_H]) in ipaddress.ip_network(cidrip) and logEntryList[RESP_P] != "137":#checks to make sure the origin IP is one of the IPs being searched and not netbios (port 137)
                         ipDataList[i][0].addData(logEntryList)
                         ipDataList[i][1].addData(logEntryList)
                 i+=1#next index in ipDataList
