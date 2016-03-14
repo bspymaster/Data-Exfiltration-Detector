@@ -8,9 +8,6 @@
 
 import glob
 
-#local directory used to start when reading from .sdb files from, as well as where to write the HTML visual page
-rootDirectory = "C:/Users/bspym/Dropbox/ITS/Data-Exfiltration-Detector/"
-
 #compile a list of networks to compile data
 networkList = []
 with open("db/info.sdbd","r") as ipInfoDoc:
@@ -20,6 +17,8 @@ with open("db/info.sdbd","r") as ipInfoDoc:
 #####################
 #construct .CSS file#
 #####################
+
+print("generating stylesheets and index page...")
 
 with open("db/styles.css","w") as cssDoc:
     cssDoc.write("h1,h4{\n\ttext-align:center;\n}\n\n#ratio_chart,#asreq_chart,#asresp_chart{\n\twidth:915px;\n\theight:300px;\n}\n#ratio_filter,#asreq_filter,#asresp_filter{\n\twidth:915px;\n\theight:50px;\n}\n")
@@ -44,7 +43,10 @@ with open("db/index.html","w") as indexDoc:
 #############################
 #for all available networks logged
 
+print("generating {0} pages for each network with data logged...".format(len(networkList)))
+
 for network in networkList:
+    print("generating page for {0}.".format(network))
     networkFolderName = network.replace(".","_").replace("/","S")#constructs appropriate folder name for each network
     with open("db/{0}/visualData.html".format(networkFolderName),"w") as dataPage:
         #write standard HTML head data
@@ -94,3 +96,5 @@ for network in networkList:
         
         #write standard HTML foot data
         dataPage.write('\t\t</script>\n\t</head>\n\t<body>\n\t\t<h1>Data for {0}</h1>\n\t\t<hr />\n\t\t<a href="../index.html">&lt&ltBACK TO INDEX</a>\n\t\t<div id="dashboard_div">\n\t\t\t<table>\n\t\t\t\t<tr>\n\t\t\t\t\t<td>\n\t\t\t\t\t\t<h4>Select date range for all graphs</h4>\n\t\t\t\t\t\t<div id="all_filter"></div>\n\t\t\t\t\t</td>\n\t\t\t\t\t<td>\n\t\t\t\t\t\t<div id="ratio_chart"></div>\n\t\t\t\t\t\t<div id="ratio_filter"></div>\n\t\t\t\t\t</td>\n\t\t\t\t</tr>\n\t\t\t\t<tr>\n\t\t\t\t\t<td>\n\t\t\t\t\t\t<div id="asreq_chart"></div>\n\t\t\t\t\t\t<div id="asreq_filter"></div>\n\t\t\t\t\t</td>\n\t\t\t\t\t<td>\n\t\t\t\t\t\t<div id="asresp_chart"></div>\n\t\t\t\t\t\t<div id="asresp_filter"></div>\n\t\t\t\t\t</td>\n\t\t\t\t<tr>\n\t\t\t</table>\n\t\t</div>\n\t</body>\n</html>\n'.format(network))
+
+print("Visual pages have been created. Please go to db/index.html to access the webpages.")
